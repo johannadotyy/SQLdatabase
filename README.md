@@ -19,7 +19,7 @@ EcoMart requires a flexible, scalable, and secure database solution to accommoda
 ### Skills
 - PostgreSQL database design & architecture: design relational schemas, define primary/foreign keys, establish relationships among tables
 - SQL: joins, aggregate functions, sorting/filtering
-- Optimizing queries: monitor query execution, optimize queries, utilize indexes
+- Optimizing SQL queries: monitor query execution, utilize indexes
 
 ### Results
 We created a RDMS for EcoMart to hold all data related to their products and orders. This database structure 
