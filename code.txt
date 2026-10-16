@@ -1,0 +1,234 @@
+-- creates database
+
+CREATE DATABASE "ecomart";
+
+
+-- create schema to organize tables
+CREATE SCHEMA IF NOT EXISTS "ecomart";
+
+SET search_path TO "ecomart";
+
+
+
+--staging data
+-- drop if exists for clean re-runs
+
+DROP TABLE IF EXISTS stagingflat CASCADE;
+
+-- create staging table that matches csv structure
+
+CREATE TABLE stagingflat (
+region        VARCHAR(100),
+country       VARCHAR(100),
+itemtype      VARCHAR(100),
+saleschannel  VARCHAR(10),
+orderpriority VARCHAR(1),
+orderdate     DATE,
+orderid       INT,
+shipdate      DATE,
+unitssold     INT,
+unitprice     DECIMAL(20,2),
+unitcost      DECIMAL(20,2),
+totalrevenue  DECIMAL(20,2),
+totalcost     DECIMAL(20,2),
+totalprofit   DECIMAL(20,2)
+);
+
+
+
+--import data
+
+\copy "ecomart".stagingflat FROM '/Users/Public/ecomart_flat.csv' WITH (FORMAT csv, HEADER true, DELIMITER ','); 
+
+
+-- check data
+
+SELECT COUNT(*) FROM stagingflat;
+SELECT * FROM stagingflat LIMIT 10;
+
+
+-- create tables 
+-- clean slate
+
+DROP TABLE IF EXISTS locations CASCADE;
+DROP TABLE IF EXISTS orders CASCADE;
+DROP TABLE IF EXISTS products CASCADE;
+DROP TABLE IF EXISTS sales CASCADE;
+
+
+-- locations table
+
+CREATE TABLE locations (
+countryid SERIAL PRIMARY KEY,
+region VARCHAR(100) NOT NULL,
+country VARCHAR(50) NOT NULL
+);
+
+
+-- orders table
+
+CREATE TABLE orders (
+orderid	INT PRIMARY KEY,
+saleschannel VARCHAR(10) NOT NULL,
+orderpriority VARCHAR(1) NOT NULL,
+orderdate DATE NOT NULL,
+shipdate 	DATE NOT NULL,
+unitssold     INT NOT NULL
+);
+
+
+-- products table
+
+CREATE TABLE products (
+productid	SERIAL PRIMARY KEY,
+itemtype   VARCHAR(100) NOT NULL,
+unitprice     DECIMAL(20,2) NOT NULL,
+unitcost      DECIMAL(20,2) NOT NULL
+);
+
+
+-- sales table
+
+CREATE TABLE sales (
+salesid SERIAL PRIMARY KEY,
+orderid	INT NOT NULL REFERENCES orders(orderid),
+countryid 	INT NOT NULL REFERENCES locations(countryid),
+productid 	INT NOT NULL REFERENCES products(productid),
+totalrevenue  DECIMAL(20,2) NOT NULL,
+totalcost     DECIMAL(20,2) NOT NULL,
+totalprofit   DECIMAL(20,2)
+);
+
+
+--populate tables
+-- populate locations
+
+INSERT INTO locations (region, country)
+SELECT DISTINCT
+region,
+country
+FROM stagingflat
+WHERE country IS NOT NULL;
+
+
+-- populate orders
+
+INSERT INTO orders (orderid, saleschannel, orderpriority, orderdate, shipdate, unitssold)
+SELECT DISTINCT
+orderid,
+saleschannel,
+orderpriority,
+orderdate,
+shipdate,
+unitssold
+FROM stagingflat
+WHERE orderid IS NOT NULL;
+
+-- populate products table
+
+INSERT INTO products (itemtype, unitprice, unitcost)
+SELECT DISTINCT 
+itemtype, 
+unitprice,
+unitcost
+FROM stagingflat
+WHERE itemtype IS NOT NULL;
+
+
+
+-- populate sales
+
+INSERT INTO sales (orderid, countryid, productid, totalrevenue, totalcost, totalprofit)
+SELECT DISTINCT
+    o.orderid,
+    l.countryid,
+    p.productid,
+    sf.totalrevenue,
+    sf.totalcost,
+    sf.totalprofit
+FROM stagingflat sf
+JOIN orders o ON o.orderid = sf.orderid
+JOIN locations l ON l.country = sf.country
+JOIN products p ON p.itemtype = sf.itemtype;
+
+
+
+-- queries
+-- which product types are the most profitable (top 3)?
+
+SELECT p.itemtype, SUM(s.totalprofit) AS total_profit
+FROM sales s 
+JOIN products p ON p.productid = s.productid
+GROUP BY p.itemtype
+ORDER BY total_profit DESC
+LIMIT 3;
+
+
+--which countries had the highest profit (top 5)
+
+SELECT l.country, SUM(s.totalprofit) AS total_profit
+FROM sales s 
+JOIN locations l ON l.countryid = s.countryid
+GROUP BY l.country
+ORDER BY total_profit DESC
+LIMIT 5;
+
+-- most popular items in Sudan
+SELECT SUM(o.unitssold) AS total_units_sold, l.country, p.itemtype
+FROM sales s
+JOIN products p ON p.productid = s.productid
+JOIN locations l ON l.countryid = s.countryid
+JOIN orders o ON o.orderid = s.orderid
+WHERE l.country = 'Sudan'
+GROUP BY p.itemtype, l.country
+ORDER BY total_units_sold DESC;
+
+
+-- queries optimized 
+
+-- which product types are the most profitable (top 3)?
+-- optimized with index
+
+
+CREATE INDEX idx_sales_product_profit ON sales(productid, totalprofit);
+
+SELECT p.itemtype, SUM(s.totalprofit) AS total_profit
+FROM sales s 
+JOIN products p ON p.productid = s.productid
+GROUP BY p.itemtype
+ORDER BY total_profit DESC
+LIMIT 3;
+
+--which countries had the highest profit (top 5)
+--optimized order of operations
+
+SELECT l.country, top_sales.total_profit
+FROM (
+    SELECT countryid, SUM(totalprofit) AS total_profit
+    FROM sales
+    GROUP BY countryid
+    ORDER BY total_profit DESC
+    LIMIT 5
+) top_sales
+JOIN locations l ON l.countryid = top_sales.countryid
+ORDER BY top_sales.total_profit DESC;
+
+
+-- most popular items in Sudan 
+-- created indexes on foreign keys in sales table
+
+CREATE INDEX idx_sales_countryid ON sales(countryid);
+CREATE INDEX idx_sales_productid ON sales(productid);
+CREATE INDEX idx_sales_orderid ON sales(orderid);
+
+
+SELECT SUM(o.unitssold) AS total_units_sold, l.country, p.itemtype
+FROM sales s
+JOIN products p ON p.productid = s.productid
+JOIN locations l ON l.countryid = s.countryid
+JOIN orders o ON o.orderid = s.orderid
+WHERE l.country = 'Sudan'
+GROUP BY p.itemtype, l.country
+ORDER BY total_units_sold DESC;
+
+
