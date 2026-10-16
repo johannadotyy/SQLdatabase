@@ -1,7 +1,7 @@
 # Designing SQL database for online retailer
 
 ## Executive Summary
-Using SQL, I designed and created a SQL database from scratch for an online retailer. Starting with a flat excel file from an online retailer containing data from customer orders. Prioritizing efficiency, I created multiple normalized tables for the retailer's data. Then data was imported into the database structure and used to perform multiple queries. Those queries were then optimized using techniques including indexing.
+Using PostgreSQL, I designed and created a SQL database from scratch for an online retailer. Starting with a flat excel file from an online retailer containing data from customer orders. Prioritizing efficiency and minimizing data redundancy, I created multiple normalized tables for the retailer's data. Then data was imported into the database structure and used to perform multiple queries. Those queries were then optimized using techniques including indexing.
 
 ### Business Problem
 EcoMart requires a flexible, scalable, and secure database solution to accommodate dynamic product data (pricing, attributes, sustainability certifications, reviews), handle growing data volumes/traffic without compromising performance, and ensure proactive security and maintenance.
